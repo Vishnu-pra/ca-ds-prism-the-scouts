@@ -24,9 +24,17 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.settings import *
 from src.parsers import get_parser_for_website
-from src.utils.helpers import generate_rfp_id
+from src.utils.helpers import (
+    generate_rfp_id,
+    download_file_from_url,
+    load_tracker_df,
+    save_tracker_df,
+    download_file_from_gcs,
+    get_gcs_client,
+    upload_file_to_gcs,
+)
 from src.llm_utils.text_extraction import text_extraction
-from src.llm_utils.summarisation import summarise_text_with_gemini
+from src.llm_utils.summarisation import Summariser
 from src.llm_utils.rm_tagger import get_relevant_rms
 from src.llm_utils.llm_detail_extraction import extarct_details
 
@@ -40,46 +48,6 @@ def _yesterday_date():
     return (datetime.utcnow() - timedelta(days=1)).date()
 
 
-def _load_tracker_df(uri: Optional[str]) -> pd.DataFrame:
-    if not uri:
-        return pd.DataFrame()
-    try:
-        return pd.read_csv(uri, storage_options={"token": "google_default"})
-    except Exception as e:
-        print(f"Warning: could not load tracker CSV from {uri}: {e}")
-        return pd.DataFrame()
-
-
-def _save_tracker_df(df: pd.DataFrame, uri: Optional[str]) -> None:
-    if not uri or df is None:
-        return
-    try:
-        df.to_csv(uri, index=False, storage_options={"token": "google_default"})
-        print(f"Tracker CSV saved to {uri}")
-    except Exception as e:
-        print(f"Warning: could not save tracker CSV to {uri}: {e}")
-
-
-def _download_file(url: str, title: str, index: int) -> Optional[str]:
-    try:
-        if not url:
-            return None
-        safe_title = (title or 'rfp').replace('/', '_').replace(' ', '_')[:50]
-        ext = os.path.splitext(url)[1] or '.bin'
-        filename = f"{safe_title}_{index}{ext}"
-        local_path = os.path.join(DOWNLOAD_DIR, filename)
-        resp = requests.get(url, timeout=60)
-        if resp.status_code == 200:
-            with open(local_path, 'wb') as f:
-                f.write(resp.content)
-            return local_path
-        print(f"Failed to download {url}: {resp.status_code}")
-        return None
-    except Exception as e:
-        print(f"Error downloading {url}: {e}")
-        return None
-
-
 def main(start_date: Optional[str] = None, end_date: Optional[str] = None):
     _ensure_dirs()
 
@@ -89,8 +57,7 @@ def main(start_date: Optional[str] = None, end_date: Optional[str] = None):
     end_dt = datetime.fromisoformat(end_date).date() if end_date else yday
 
     # Load tracker CSV
-    tracker_uri = GCS_RFP_TRACKER_CSV_URI
-    tracker_df = _load_tracker_df(tracker_uri)
+    tracker_df = load_tracker_df()
 
     all_rfps: List[Dict[str, Any]] = []
     print(f"Starting crawl for {len(WEBSITES)} websites | window: {start_dt} to {end_dt}")
@@ -125,93 +92,252 @@ def main(start_date: Optional[str] = None, end_date: Optional[str] = None):
             CSV_COL_EXTERNAL_ID,
             CSV_COL_ORIGINAL_FILE_PATH,
             CSV_COL_RELEVANT_RMS,
+            CSV_COL_CAPABILITY_COMPARISON,
+            CSV_COL_DOCUMENT_COMPARISON,
+            CSV_COL_DUE_DATES,
+            CSV_COL_CORRIGENDUM,
+            CSV_COL_SUMMARY_LINK,
+            CSV_COL_TITLE,
         ])
 
     for rfp in all_rfps:
         title = rfp.get('title') or 'rfp'
-        file_urls = rfp.get('file_urls') or []
+        file_url = rfp.get('document_url') or ""
 
         # Download attached files
-        local_files: List[str] = []
-        for idx, url in enumerate(file_urls):
-            p = _download_file(url, title, idx)
-            if p:
-                local_files.append(p)
+        local_file = download_file_from_url(file_url, title, DOWNLOAD_DIR) or None
+        rfp['local_file'] = local_file
+        file_name = os.path.basename(local_file)
 
         # Extract text
-        texts: List[str] = []
-        for p in local_files:
-            t = text_extraction(p)
-            if t:
-                texts.append(t)
-        combined_text = "\n\n".join([t for t in texts if t])
+        if local_file:
+            text = text_extraction(local_file)
+            rfp['text'] = text
 
         # Extract details and infer corrigendum
         extracted_external_id = None
-        is_corrigendum = rfp.get('corregendum')
+
+        # Corrigendum handling based on tracker by title
+        corrigendum_num = rfp.get('corregendum')
+        if corrigendum_num and isinstance(tracker_df, pd.DataFrame) and not tracker_df.empty:
+            try:
+                current_num = int(str(corrigendum_num).strip())
+            except Exception:
+                current_num = None
+
+            if current_num:
+                match = tracker_df[tracker_df[CSV_COL_TITLE] == title]
+                if not match.empty and (CSV_COL_CORRIGENDUM in tracker_df.columns):
+                    prev_raw = match.iloc[0].get(CSV_COL_CORRIGENDUM)
+                    try:
+                        prev_num = int(str(prev_raw).strip()) if prev_raw is not None else None
+                    except Exception:
+                        prev_num = None
+
+                    if prev_num is not None:
+                        if prev_num == current_num:
+                            # no change
+                            print(" Skipping as it seems to be an SBI RFP which is not a corrigendum")
+                            continue
+                        elif prev_num < current_num:
+                            # newer corrigendum detected
+                            rfp['opening_date'] = str(_yesterday_date())
+                            rfp['is_corregendum'] = True
+                            rfp['match_internal_id'] = match.iloc[0].get(CSV_COL_INTERNAL_ID)
+
         try:
-            details = extarct_details(combined_text)  # expected dict with keys incl. rfp_external_id
+            details = extarct_details(text)  # expected dict with keys incl. rfp_external_id
             if isinstance(details, dict):
-                extracted_external_id = details.get('rfp_external_id')
+                extracted_external_id = details.get('rfp_id')
+                due_dates = details.get('events')
         except TypeError:
             details = None
 
-        if is_corrigendum in (None, "", False):
-            if extracted_external_id and not tracker_df.empty and CSV_COL_EXTERNAL_ID in tracker_df.columns:
-                match = tracker_df[tracker_df[CSV_COL_EXTERNAL_ID] == extracted_external_id]
-                is_corrigendum = not match.empty
-            else:
-                is_corrigendum = False
-        rfp['corregendum'] = bool(is_corrigendum)
-
-        # If corrigendum, include original file text
-        original_text = ""
-        if rfp['corregendum'] and extracted_external_id and not tracker_df.empty:
+        # If SBI Type Corregendum
+        if extracted_external_id and not tracker_df.empty:
             match = tracker_df[tracker_df[CSV_COL_EXTERNAL_ID] == extracted_external_id]
-            if not match.empty and CSV_COL_ORIGINAL_FILE_PATH in match.columns:
-                orig_path_or_url = match.iloc[0].get(CSV_COL_ORIGINAL_FILE_PATH)
-                if isinstance(orig_path_or_url, str) and orig_path_or_url:
-                    if os.path.exists(orig_path_or_url):
-                        original_text = text_extraction(orig_path_or_url) or ""
-                    elif orig_path_or_url.startswith('http'):
-                        tmp = _download_file(orig_path_or_url, title + "_orig", 0)
-                        if tmp:
-                            original_text = text_extraction(tmp) or ""
+            rfp['is_corrigendum'] = not match.empty
+            rfp['match_internal_id'] = match.iloc[0].get(CSV_COL_INTERNAL_ID)
 
-        summary_input_text = (original_text + ("\n\n" if (original_text and combined_text) else "") + combined_text).strip()
-        summary_text = summarise_text_with_gemini(summary_input_text) if summary_input_text else ""
+        # If corrigendum, compose text from original + specific corrigendum files + current
+        if rfp.get('is_corrigendum') and ('corrigendum' not in rfp.keys()):
+            original_text = ""
+            corrigenda_texts: List[str] = []
+
+            # Download original file given a blob path like "/folder1/folder2/file.pdf"
+            orig_path = match.iloc[0].get(CSV_COL_ORIGINAL_FILE_PATH)
+            if isinstance(orig_path, str) and orig_path:
+                blob_name = orig_path.strip('/')
+                local_orig = os.path.join(ARTIFACTS_DIR, os.path.basename(blob_name) or 'orig_file')
+                try:
+                    download_file_from_gcs(GCS_BUCKET_NAME, blob_name, local_orig, GCS_SERVICE_ACCOUNT_KEY_PATH)
+                    original_text = text_extraction(local_orig) or ""
+                except Exception as e:
+                    print(f"Warning: failed to fetch original from GCS {blob_name}: {e}")
+
+            # Download and append all corrigendum files from JSON list of dict values
+            if CSV_COL_CORRIGENDUM in match.columns:
+                raw_corr = match.iloc[0].get(CSV_COL_CORRIGENDUM)
+                
+                try:
+                    corr_list = json.loads(raw_corr) if isinstance(raw_corr, str) and raw_corr else []
+                except Exception:
+                    corr_list = []
+                file_paths: List[str] = []
+                
+                for item in corr_list:
+                    if isinstance(item, dict):
+                        for v in item.values():
+                            if isinstance(v, str):
+                                file_paths.append(v)
+                    elif isinstance(item, str):
+                        file_paths.append(item)
+                
+                for idx, pth in enumerate(file_paths):
+                    try:
+                        blob_name = pth.strip('/')
+                        local_corr = os.path.join(ARTIFACTS_DIR, os.path.basename(blob_name) or f'corr_{idx}')
+                        download_file_from_gcs(GCS_BUCKET_NAME, blob_name, local_corr, GCS_SERVICE_ACCOUNT_KEY_PATH)
+                        t = text_extraction(local_corr)
+                        if t:
+                            corrigenda_texts.append(t)
+                    except Exception as e:
+                        print(f"Warning: failed to fetch corrigendum from GCS {pth}: {e}")
+
+                # Build combined text: original + all corrigenda + current
+                segments: List[str] = []
+                if original_text:
+                    segments.append(original_text)
+                segments.extend([s for s in corrigenda_texts if s])
+                if text:
+                    segments.append(text)
+                combined_text = "\n\n".join(segments).strip()
+                # Update text variables
+                if combined_text:
+                    text = combined_text
+                    rfp['text'] = text
+
+        # Use text for summarisation input
+        summary_input_text = text.strip() if text else ""
+        summariser = Summariser()
+        tech_summary, tech_similarity, doc_summary, doc_similarity = summariser.summariser_pipeline(summary_input_text, file_name) if summary_input_text else ""
 
         # Tag relevant RMs
         try:
-            relevant_rms = get_relevant_rms(summary_text) or []
+            relevant_rms = get_relevant_rms(tech_summary) or []
+            ## Filter here
         except Exception:
             relevant_rms = []
 
-        # Update tracker by external id
-        ext_id_for_tracker = extracted_external_id or rfp.get('external_id')
-        if ext_id_for_tracker:
-            if tracker_df.empty:
-                tracker_df = pd.DataFrame(columns=[
-                    CSV_COL_INTERNAL_ID,
-                    CSV_COL_EXTERNAL_ID,
-                    CSV_COL_ORIGINAL_FILE_PATH,
-                    CSV_COL_RELEVANT_RMS,
-                ])
-            mask = tracker_df[CSV_COL_EXTERNAL_ID] == ext_id_for_tracker if CSV_COL_EXTERNAL_ID in tracker_df.columns else pd.Series([False] * len(tracker_df))
-            row = {
-                CSV_COL_EXTERNAL_ID: ext_id_for_tracker,
-                CSV_COL_RELEVANT_RMS: ",".join(relevant_rms) if relevant_rms else "",
-            }
-            if local_files and (CSV_COL_ORIGINAL_FILE_PATH in tracker_df.columns):
-                row[CSV_COL_ORIGINAL_FILE_PATH] = local_files[0]
-            if mask.any():
-                for k, v in row.items():
-                    tracker_df.loc[mask, k] = v
-            else:
-                tracker_df = pd.concat([tracker_df, pd.DataFrame([row])], ignore_index=True)
+        # Map relevant RM IDs to names from artifacts/rms.json
+        relevant_rm_names: List[str] = []
+        try:
+            rm_json_path = os.path.join(ARTIFACTS_DIR, "rms.json")
+            with open(rm_json_path, "r") as f:
+                rm_dir = json.load(f)  # expected: list of {"rm_id": ..., "rm_name": ...}
+            id_to_name = {}
+            for item in rm_dir if isinstance(rm_dir, list) else []:
+                rid = item.get("rm_id")
+                rname = item.get("rm_name")
+                if rid is not None and rname:
+                    id_to_name[str(rid)] = rname
+            relevant_rm_names = [id_to_name[str(rid)] for rid in relevant_rms if str(rid) in id_to_name]
+            rfp["relevant_rm_names"] = relevant_rm_names
+        except Exception as e:
+            print(f"Warning: failed to map relevant RM IDs to names: {e}")
+            relevant_rm_names = []
+
+        # Update tracker with new rules
+        opening_date = rfp.get('opening_date') or str(start_dt)
+        match_internal_id = rfp.get('match_internal_id') or generate_rfp_id(rfp)
+        dest_blob = None
+        if local_file and match_internal_id and file_name:
+            dest_blob = f"rfp_details/{match_internal_id}/{file_name}"
+
+        # Helper to append a dict to JSON list in a cell
+        def _append_corrigendum(json_cell, key: str, value: str) -> str:
+            try:
+                data = json.loads(json_cell) if isinstance(json_cell, str) and json_cell else []
+                if not isinstance(data, list):
+                    data = []
+            except Exception:
+                data = []
+            data.append({key: value})
+            return json.dumps(data)
+
+        # Helper to upload local_file (if any) and update tracker row with path and appended corrigendum value
+        def _upload_and_update(mask_int, corr_value: str, ):
+            if dest_blob:
+                try:
+                    upload_file_to_gcs(local_file, GCS_BUCKET_NAME, dest_blob, GCS_SERVICE_ACCOUNT_KEY_PATH)
+                except Exception as e:
+                    print(f"Warning: failed to upload file to GCS: {e}")
+            if mask_int.any():
+                if dest_blob:
+                    tracker_df.loc[mask_int, CSV_COL_ORIGINAL_FILE_PATH] = dest_blob
+                existing = tracker_df.loc[mask_int, CSV_COL_CORRIGENDUM].iloc[0] if mask_int.any() else ""
+                tracker_df.loc[mask_int, CSV_COL_RELEVANT_RMS] = relevant_rm_names
+                tracker_df.loc[mask_int, CSV_COL_CAPABILITY_COMPARISON] = tech_similarity
+                tracker_df.loc[mask_int, CSV_COL_DOCUMENT_COMPARISON] = doc_similarity
+                tracker_df.loc[mask_int, CSV_COL_DUE_DATES] = due_dates
+                tracker_df.loc[mask_int, CSV_COL_SUMMARY_LINK] = tech_summary_dest_blob
+                tracker_df.loc[mask_int, CSV_COL_CORRIGENDUM] = _append_corrigendum(existing, opening_date, corr_value)
+
+        tech_summary_file_name = f"artifacts/{match_internal_id}_{yday}_tech_summary.txt"
+        with open(tech_summary_file_name, "w") as f:
+            f.write(tech_summary)
+        tech_summary_dest_blob = f"rfp_details/{match_internal_id}/{tech_summary_file_name}"
+        upload_file_to_gcs(tech_summary_file_name, GCS_BUCKET_NAME, tech_summary_dest_blob, GCS_SERVICE_ACCOUNT_KEY_PATH)
+
+        doc_summary_file_name = f"artifacts/{match_internal_id}_{yday}_doc_summary.txt"
+        with open(doc_summary_file_name, "w") as f:
+            f.write(doc_summary)
+        doc_summary_dest_blob = f"rfp_details/{match_internal_id}/{doc_summary_file_name}"
+        upload_file_to_gcs(doc_summary_file_name, GCS_BUCKET_NAME, doc_summary_dest_blob, GCS_SERVICE_ACCOUNT_KEY_PATH)              
+
+        # Case 1: explicit 'corregendum' > 0
+        if ('corregendum' in rfp) and rfp.get('corregendum'):
+            try:
+                corr_val = int(str(rfp.get('corregendum')).strip())
+            except Exception:
+                corr_val = 0
+            if corr_val > 0 and match_internal_id:
+                mask_int = tracker_df[CSV_COL_INTERNAL_ID] == match_internal_id
+                _upload_and_update(mask_int, "", tech_summary_dest_blob, doc_summary_dest_blob)
+                # Done with this RFP row update
+                continue
+
+        # Case 2: inferred is_corrigendum True
+        if rfp.get('is_corrigendum') is True and match_internal_id:
+            mask_int = tracker_df[CSV_COL_INTERNAL_ID] == match_internal_id
+            _upload_and_update(mask_int, dest_blob or "", tech_summary_dest_blob, doc_summary_dest_blob)
+            continue
+
+        # Case 3: new entry (no/false corrigendum)
+        # if extracted_external_id:
+        row = {
+            CSV_COL_EXTERNAL_ID: extracted_external_id,
+            CSV_COL_RELEVANT_RMS: ",".join(relevant_rm_names) if relevant_rm_names else "",
+            CSV_COL_RM: "",
+            CSV_COL_CAPABILITY_COMPARISON: tech_similarity,
+            CSV_COL_DOCUMENT_COMPARISON: doc_similarity,
+            CSV_COL_DUE_DATES: due_dates,
+            CSV_COL_CORRIGENDUM: [],
+            CSV_COL_SUMMARY_LINK: "",
+            CSV_COL_TITLE: title,
+        }
+
+        if not match_internal_id:
+            match_internal_id = generate_rfp_id(rfp)
+        row[CSV_COL_INTERNAL_ID] = match_internal_id
+
+        path = upload_file_to_gcs(local_file, GCS_BUCKET_NAME, f"rfp_details/{match_internal_id}/{file_name}", GCS_SERVICE_ACCOUNT_KEY_PATH)
+        row[CSV_COL_ORIGINAL_FILE_PATH] = path
+
+        tracker_df = pd.concat([tracker_df, pd.DataFrame([row])], ignore_index=True)
 
     # Save tracker CSV back to GCS
-    _save_tracker_df(tracker_df, tracker_uri)
+    save_tracker_df(tracker_df, tracker_uri)
 
     print("Pipeline finished")
 

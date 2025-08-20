@@ -14,13 +14,11 @@ document_kb_dir = "/Users/viswanaath.krishnamoorthy/Documents/GitHub/ca-ds-prism
 class Summariser():
 
     def __init__(self):
-
         self.doc_summariser = GetDocumentRequirement()
         self.tech_simmariser = GetTechnicalRequirement()
 
     
     def summariser_pipeline(self, pdf_text, pdf_name):
-
         try:
             tech_summary = analyze_text(pdf_text, self.tech_simmariser.system_instruction)
 
@@ -33,9 +31,6 @@ class Summariser():
             if document_summary:
                 beautified_document_summary = self.doc_summariser.generate_analysis_report(document_summary, pdf_name)
                 doc_similarity = compare_document_requirements_with_knowledge_base(beautified_document_summary, document_kb_dir)
-            
-            
-
             
             return beautified_tech_summary, tech_similarity, beautified_document_summary, doc_similarity
 

@@ -73,14 +73,25 @@ LLM_PROXY_URL = os.getenv('LLM_PROXY_URL', '')
 MAX_RETRIES = 3
 
 # CSV tracker configuration (stored on GCS)
-# Example: gs://your-bucket/path/to/rfp_tracker.csv
-GCS_RFP_TRACKER_CSV_URI = os.getenv('GCS_RFP_TRACKER_CSV_URI', '')
+GCS_BUCKET_NAME = os.getenv('GCS_BUCKET_NAME', 'prism-5x-scouts')
+GCS_SERVICE_ACCOUNT_KEY_PATH = os.getenv('GCS_SERVICE_ACCOUNT_KEY_PATH', 'artifacts/gcp-hackathon-key.json')
+GCS_TRACKER_BLOB_NAME = os.getenv('GCS_TRACKER_BLOB_NAME', 'db.csv')
 
 # CSV column names (assumed; can be overridden via env)
-CSV_COL_INTERNAL_ID = os.getenv('CSV_COL_INTERNAL_ID', 'rfp_internal_id')
-CSV_COL_EXTERNAL_ID = os.getenv('CSV_COL_EXTERNAL_ID', 'rfp_external_id')
-CSV_COL_ORIGINAL_FILE_PATH = os.getenv('CSV_COL_ORIGINAL_FILE_PATH', 'original_file_path')
-CSV_COL_RELEVANT_RMS = os.getenv('CSV_COL_RELEVANT_RMS', 'relevant_rms')
+CSV_COL_INTERNAL_ID = os.getenv('CSV_COL_INTERNAL_ID', 'internal_id')
+CSV_COL_EXTERNAL_ID = os.getenv('CSV_COL_EXTERNAL_ID', 'external_id')
+CSV_COL_ORIGINAL_FILE_PATH = os.getenv('CSV_COL_ORIGINAL_FILE_PATH', 'rfp_link')
+CSV_COL_RELEVANT_RMS = os.getenv('CSV_COL_RELEVANT_RMS', 'relevent_RM')
+CSV_COL_RM = os.getenv('CSV_COL_RELEVANT_RM', '`RM')
+CSV_COL_CAPABILITY_COMPARISON = os.getenv('CSV_COL_CAPABILITY_COMPARISON', 'capability_comparison')
+CSV_COL_DOCUMENT_COMPARISON = os.getenv('CSV_COL_DOCUMENT_COMPARISON', 'document_comparison')
+CSV_COL_DUE_DATES = os.getenv('CSV_COL_DUE_DATES', 'due_dates')
+CSV_COL_CORRIGENDUM = os.getenv('CSV_COL_CORRIGENDUM', 'corrigendum')
+CSV_COL_SUMMARY_LINK = os.getenv('CSV_COL_SUMMARY_LINK', 'summary_link')
+CSV_COL_TITLE = os.getenv('CSV_COL_TITLE', 'title') 
 
-# Local download directory for fetched files
+# Local download directory for temp fetched files
 DOWNLOAD_DIR = os.getenv('DOWNLOAD_DIR', 'output/downloads')
+
+# Local artifacts directory (for tracker CSV and other intermediates)
+ARTIFACTS_DIR = os.getenv('ARTIFACTS_DIR', 'artifacts')
