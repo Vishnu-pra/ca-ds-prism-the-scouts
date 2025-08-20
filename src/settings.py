@@ -65,3 +65,9 @@ USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 
 # Delay between requests (seconds) to avoid rate limiting
 REQUEST_DELAY = 1.0
+
+
+# LLM Settings
+LLM_PROXY_API_KEY = os.getenv('LLM_PROXY_API_KEY', '')
+LLM_PROXY_URL = os.getenv('LLM_PROXY_URL', '')
+MAX_RETRIES = 3

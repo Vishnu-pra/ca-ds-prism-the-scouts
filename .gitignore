@@ -212,3 +212,9 @@ ui_venv/
 llm_venv/
 artifacts/
 output/
+data/
+crawl_tests/
+experiments/
+integration codes/
+
+*.DS_Store
