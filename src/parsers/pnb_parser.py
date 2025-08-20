@@ -25,7 +25,7 @@ class PNBParser(BaseParser):
         super().__init__(website_config)
         self.search_path = website_config.get('search_path', '/projects')
 
-    def parse(self) -> List[Dict[str, Any]]:
+    def parse(self, start_date=None, end_date=None) -> List[Dict[str, Any]]:
         """
         Parse the contractor website for RFPs.
 

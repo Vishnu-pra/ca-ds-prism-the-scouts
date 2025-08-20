@@ -71,3 +71,16 @@ REQUEST_DELAY = 1.0
 LLM_PROXY_API_KEY = os.getenv('LLM_PROXY_API_KEY', '')
 LLM_PROXY_URL = os.getenv('LLM_PROXY_URL', '')
 MAX_RETRIES = 3
+
+# CSV tracker configuration (stored on GCS)
+# Example: gs://your-bucket/path/to/rfp_tracker.csv
+GCS_RFP_TRACKER_CSV_URI = os.getenv('GCS_RFP_TRACKER_CSV_URI', '')
+
+# CSV column names (assumed; can be overridden via env)
+CSV_COL_INTERNAL_ID = os.getenv('CSV_COL_INTERNAL_ID', 'rfp_internal_id')
+CSV_COL_EXTERNAL_ID = os.getenv('CSV_COL_EXTERNAL_ID', 'rfp_external_id')
+CSV_COL_ORIGINAL_FILE_PATH = os.getenv('CSV_COL_ORIGINAL_FILE_PATH', 'original_file_path')
+CSV_COL_RELEVANT_RMS = os.getenv('CSV_COL_RELEVANT_RMS', 'relevant_rms')
+
+# Local download directory for fetched files
+DOWNLOAD_DIR = os.getenv('DOWNLOAD_DIR', 'output/downloads')
