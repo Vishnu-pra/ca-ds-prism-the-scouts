@@ -88,6 +88,7 @@ Please extract the following information from the text provided below.
         llm_user_prompt=user_prompt,
         temperature=0.3,
         top_p=0.9,
+        response_format=response_schema 
     )
 
     if llm_output:
