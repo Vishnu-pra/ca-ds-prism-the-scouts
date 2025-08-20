@@ -50,6 +50,10 @@ def main():
         print(f"Crawling completed. Found {stats['new_rfps']} new RFPs")
         print(f"Updated {stats['updated_rfps']} existing RFPs")
         print(f"Stats saved to {stats_file}")
+
+
+        # calling summariser using the extracted text
+
         
     except Exception as e:
         print(f"Error in main process: {str(e)}")
