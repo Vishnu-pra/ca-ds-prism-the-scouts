@@ -25,16 +25,16 @@ class CrawlerManager:
     - Consolidating results and detecting new/updated RFPs
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, websites, output_dir):
         """
         Initialize the CrawlerManager.
         
         Args:
-            config: Configuration dictionary containing crawler settings
+            websites: List of websites to crawl
+            output_dir: Directory to save output files
         """
-        self.logger = logging.getLogger(__name__)
-        self.config = config
-        self.websites = config.get('websites', [])
+        self.websites = websites
+        self.output_dir = output_dir
         self.previous_data = self._load_previous_data()
         
     def _load_previous_data(self) -> Dict[str, Any]:

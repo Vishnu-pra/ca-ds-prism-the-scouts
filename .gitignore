@@ -217,4 +217,7 @@ crawl_tests/
 experiments/
 integration codes/
 
+
+src/llm_utils/tester.py
+
 *.DS_Store
