@@ -15,6 +15,7 @@ def extract_text_from_pdf(pdf_path):
     except Exception as e:
         print(f"Error extracting PDF text from {pdf_path}: {str(e)}")
         return None
+    
 
 def extract_text_from_docx(docx_path):
     """Extract text from DOCX file"""
@@ -57,4 +58,4 @@ def text_extraction(file_path:str) -> str:
     else:
         print(" Unknown file format in text extraction : ", file_path)
         return ""
-    
+
