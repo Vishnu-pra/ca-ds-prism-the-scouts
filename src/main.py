@@ -23,20 +23,12 @@ import pandas as pd
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.settings import *
-from src.parsers import get_parser_for_website
-from src.utils.helpers import (
-    generate_rfp_id,
-    download_file_from_url,
-    load_tracker_df,
-    save_tracker_df,
-    download_file_from_gcs,
-    get_gcs_client,
-    upload_file_to_gcs,
-)
+from src.crawler.crawl_manager import get_parser_for_website
+from src.utils.helpers import *
 from src.llm_utils.text_extraction import text_extraction
 from src.llm_utils.summarisation import Summariser
 from src.llm_utils.rm_tagger import get_relevant_rms
-from src.llm_utils.llm_detail_extraction import extarct_details
+from src.llm_utils.llm_detail_extraction import extract_rfp_details
 
 
 def _ensure_dirs():
@@ -48,8 +40,10 @@ def _yesterday_date():
     return (datetime.utcnow() - timedelta(days=1)).date()
 
 
-def main(start_date: Optional[str] = None, end_date: Optional[str] = None):
+def main():
     _ensure_dirs()
+    start_date = CRAWL_START_DATE
+    end_date = CRAWL_END_DATE
 
     # Dates default to yesterday (inclusive window)
     yday = _yesterday_date()
@@ -65,16 +59,15 @@ def main(start_date: Optional[str] = None, end_date: Optional[str] = None):
     # Crawl and parse
     for website in WEBSITES:
         try:
-            parser = get_parser_for_website(website)
+            parser = get_parser_for_website(website['type'])
         except ValueError as e:
             print(f"Parser error for {website.get('name')}: {e}")
             continue
 
         try:
-            rfps = parser.parse(start_date=start_dt, end_date=end_dt)
+            rfps = parser(website['search_key_words'], start_date=start_dt, end_date=end_dt)
             for r in rfps:
                 r['website_name'] = website['name']
-                r['website_url'] = website['url']
                 r['rfp_id'] = generate_rfp_id(r)
                 # default start_date
                 if not r.get('start_date'):
@@ -127,7 +120,7 @@ def main(start_date: Optional[str] = None, end_date: Optional[str] = None):
 
             if current_num:
                 match = tracker_df[tracker_df[CSV_COL_TITLE] == title]
-                if not match.empty and (CSV_COL_CORRIGENDUM in tracker_df.columns):
+                if not match.empty:
                     prev_raw = match.iloc[0].get(CSV_COL_CORRIGENDUM)
                     try:
                         prev_num = int(str(prev_raw).strip()) if prev_raw is not None else None
@@ -146,7 +139,7 @@ def main(start_date: Optional[str] = None, end_date: Optional[str] = None):
                             rfp['match_internal_id'] = match.iloc[0].get(CSV_COL_INTERNAL_ID)
 
         try:
-            details = extarct_details(text)  # expected dict with keys incl. rfp_external_id
+            details = extract_rfp_details(text)  # expected dict with keys incl. rfp_external_id
             if isinstance(details, dict):
                 extracted_external_id = details.get('rfp_id')
                 due_dates = details.get('events')
@@ -176,46 +169,45 @@ def main(start_date: Optional[str] = None, end_date: Optional[str] = None):
                     print(f"Warning: failed to fetch original from GCS {blob_name}: {e}")
 
             # Download and append all corrigendum files from JSON list of dict values
-            if CSV_COL_CORRIGENDUM in match.columns:
-                raw_corr = match.iloc[0].get(CSV_COL_CORRIGENDUM)
-                
+            raw_corr = match.iloc[0].get(CSV_COL_CORRIGENDUM)
+            
+            try:
+                corr_list = json.loads(raw_corr) if isinstance(raw_corr, str) and raw_corr else []
+            except Exception:
+                corr_list = []
+            file_paths: List[str] = []
+            
+            for item in corr_list:
+                if isinstance(item, dict):
+                    for v in item.values():
+                        if isinstance(v, str):
+                            file_paths.append(v)
+                elif isinstance(item, str):
+                    file_paths.append(item)
+            
+            for idx, pth in enumerate(file_paths):
                 try:
-                    corr_list = json.loads(raw_corr) if isinstance(raw_corr, str) and raw_corr else []
-                except Exception:
-                    corr_list = []
-                file_paths: List[str] = []
-                
-                for item in corr_list:
-                    if isinstance(item, dict):
-                        for v in item.values():
-                            if isinstance(v, str):
-                                file_paths.append(v)
-                    elif isinstance(item, str):
-                        file_paths.append(item)
-                
-                for idx, pth in enumerate(file_paths):
-                    try:
-                        blob_name = pth.strip('/')
-                        local_corr = os.path.join(ARTIFACTS_DIR, os.path.basename(blob_name) or f'corr_{idx}')
-                        download_file_from_gcs(GCS_BUCKET_NAME, blob_name, local_corr, GCS_SERVICE_ACCOUNT_KEY_PATH)
-                        t = text_extraction(local_corr)
-                        if t:
-                            corrigenda_texts.append(t)
-                    except Exception as e:
-                        print(f"Warning: failed to fetch corrigendum from GCS {pth}: {e}")
+                    blob_name = pth.strip('/')
+                    local_corr = os.path.join(ARTIFACTS_DIR, os.path.basename(blob_name) or f'corr_{idx}')
+                    download_file_from_gcs(GCS_BUCKET_NAME, blob_name, local_corr, GCS_SERVICE_ACCOUNT_KEY_PATH)
+                    t = text_extraction(local_corr)
+                    if t:
+                        corrigenda_texts.append(t)
+                except Exception as e:
+                    print(f"Warning: failed to fetch corrigendum from GCS {pth}: {e}")
 
-                # Build combined text: original + all corrigenda + current
-                segments: List[str] = []
-                if original_text:
-                    segments.append(original_text)
-                segments.extend([s for s in corrigenda_texts if s])
-                if text:
-                    segments.append(text)
-                combined_text = "\n\n".join(segments).strip()
-                # Update text variables
-                if combined_text:
-                    text = combined_text
-                    rfp['text'] = text
+            # Build combined text: original + all corrigenda + current
+            segments: List[str] = []
+            if original_text:
+                segments.append(original_text)
+            segments.extend([s for s in corrigenda_texts if s])
+            if text:
+                segments.append(text)
+            combined_text = "\n\n".join(segments).strip()
+            # Update text variables
+            if combined_text:
+                text = combined_text
+                rfp['text'] = text
 
         # Use text for summarisation input
         summary_input_text = text.strip() if text else ""

@@ -20,36 +20,34 @@ SEARCH_KEYWORDS = [
     "predictive analytics"
 ]
 
+CRAWL_START_DATE = "" # default crawl
+CRAWL_END_DATE = "" # default crawl
+
 # Websites to crawl - each website needs a type that maps to a parser
 WEBSITES = [
     {
         "name": "SBI Portal",
-        "url": "https://sbiportal.com",
-        "type": "government",
-        "search_path": "/search/opportunities",
-        "rfp_path_pattern": "/opportunity/",
-        "requires_login": False,
-        "login_credentials": {
-            "login_path": "/login",
-            "username": os.getenv('SBI_PORTAL_USERNAME', ''),
-            "password": os.getenv('SBI_PORTAL_PASSWORD', '')
-        },
-        "requires_captcha": False,
+        "type": "SBI",
+        "start_date": CRAWL_START_DATE, 
+        "end_date": CRAWL_END_DATE,
         "search_key_words": SEARCH_KEYWORDS
-    },
-    {
+    }, {
         "name": "PNB portal",
-        "url": "https://www.pnb.com",
-        "type": "contractor",
-        "search_path": "/search/projects",
-        "rfp_path_pattern": "/project/",
-        "requires_login": False,
-        "login_credentials": {
-            "login_path": "/login",
-            "username": os.getenv('PNB_PORTAL_USERNAME', ''),
-            "password": os.getenv('PNB_PORTAL_PASSWORD', '')
-        },
-        "requires_captcha": False,
+        "type": "CANARA",
+        "start_date": CRAWL_START_DATE, 
+        "end_date": CRAWL_END_DATE,
+        "search_key_words": SEARCH_KEYWORDS
+    }, {
+        "name": "UCO Bank",
+        "type": "UCO",
+        "start_date": CRAWL_START_DATE, 
+        "end_date": CRAWL_END_DATE,
+        "search_key_words": SEARCH_KEYWORDS
+    }, {
+        "name": "IDBI Bank",
+        "type": "IDBI",
+        "start_date": CRAWL_START_DATE, 
+        "end_date": CRAWL_END_DATE,
         "search_key_words": SEARCH_KEYWORDS
     }
 ]
@@ -58,7 +56,7 @@ WEBSITES = [
 OUTPUT_DIR = os.getenv('OUTPUT_DIR', 'output')
 
 # Request timeout in seconds
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = 60
 
 # User agent for web requests
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'

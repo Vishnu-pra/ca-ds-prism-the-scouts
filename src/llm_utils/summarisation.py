@@ -8,8 +8,8 @@ from utils import analyze_text
 from comapare_doc_similarity import compare_document_requirements_with_knowledge_base 
 from compare_tech_similarity import compare_text_with_knowledge_base 
 
-summary_kb_dir = "/Users/viswanaath.krishnamoorthy/Documents/GitHub/ca-ds-prism-the-scouts/src/artifacts/summary_kb"
-document_kb_dir = "/Users/viswanaath.krishnamoorthy/Documents/GitHub/ca-ds-prism-the-scouts/src/artifacts/document_kb"
+summary_kb_dir = "./artifacts/summary_kb"
+document_kb_dir = "./artifacts/document_kb"
 
 class Summariser():
 

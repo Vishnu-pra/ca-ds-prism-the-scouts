@@ -2,7 +2,8 @@ import sys
 import os
 import json
 from llm_utils.llm_proxy import llm_proxy_api
-def extract_multiple_rfp_details(rfp_text: str) -> dict:
+
+def extract_rfp_details(rfp_text: str) -> dict:
     """
     Uses an LLM to extract all key events and their details from RFP text.
     Post-processes the results to remove events with no due date.
