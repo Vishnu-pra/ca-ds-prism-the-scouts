@@ -14,6 +14,7 @@ load_dotenv()
 SEARCH_KEYWORDS = [
     "machine learning",
     "artificial intelligence",
+    "AI ML",
     "data science",
     "data analytics",
     "big data",
@@ -26,13 +27,14 @@ CRAWL_END_DATE = "" # default crawl
 # Websites to crawl - each website needs a type that maps to a parser
 WEBSITES = [
     {
-        "name": "SBI Portal",
+        "name": "SBI Bank",
         "type": "SBI",
         "start_date": CRAWL_START_DATE, 
         "end_date": CRAWL_END_DATE,
         "search_key_words": SEARCH_KEYWORDS
-    }, {
-        "name": "PNB portal",
+    },
+    {
+        "name": "CANARA Bank",
         "type": "CANARA",
         "start_date": CRAWL_START_DATE, 
         "end_date": CRAWL_END_DATE,

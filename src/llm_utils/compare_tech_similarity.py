@@ -2,7 +2,7 @@ import os
 import json
 import torch
 from sentence_transformers import SentenceTransformer, util
-from utils import get_rfp_link_from_gcs, list_files_in_gcs_folder
+from src.llm_utils.utils import get_rfp_link_from_gcs, list_files_in_gcs_folder
 
 def load_text_content(file_path):
     """Load text content from a file"""
@@ -61,7 +61,7 @@ def extract_sections(content):
 
 def calculate_text_similarity(input_text, kb_text):
     """Calculate similarity between input text and knowledge base text"""
-    model_path = "/Users/viswanaath.krishnamoorthy/Documents/GitHub/ca-ds-prism-the-scouts/src/artifacts/all-MiniLM-L6-v2"
+    model_path = "./artifacts/all-MiniLM-L6-v2"
     model = SentenceTransformer(model_path)
     
     try:
@@ -97,7 +97,7 @@ def calculate_category_similarities(input_sections, kb_sections):
     for category in ['company_capability', 'technical_capacity', 'product_capacity']:
         input_text = input_sections.get(category, '')
         kb_text = kb_sections.get(category, '')
-        
+        print(" The similarity calculated for tech category : ", category)
         if input_text and kb_text:
             scores[category] = calculate_text_similarity(input_text, kb_text)
         else:
@@ -136,6 +136,7 @@ def compare_text_with_knowledge_base(input_text, summary_kb_dir):
     
     for kb_file in kb_files:
         kb_path = os.path.join(summary_kb_dir, kb_file)
+        print(" Checking smiliarities for file : ", kb_file)
         kb_content = load_text_content(kb_path)
         
         if not kb_content:

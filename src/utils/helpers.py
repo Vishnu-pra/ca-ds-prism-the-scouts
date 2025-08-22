@@ -101,7 +101,8 @@ def download_file_from_url(url: str, title: str, download_dir: str, timeout: int
             return ""
         os.makedirs(download_dir, exist_ok=True)
         safe_title = (title or 'rfp').replace('/', '_').replace(' ', '_')[:50]
-        ext = os.path.splitext(urlparse(url).path)[1] or '.bin'
+
+        ext = os.path.splitext(urlparse(url).path)[1] or '.pdf'
         filename = f"{safe_title}{ext}"
         local_path = os.path.join(download_dir, filename)
         with requests.get(url, stream=True, timeout=timeout) as resp:
@@ -115,7 +116,7 @@ def download_file_from_url(url: str, title: str, download_dir: str, timeout: int
         print(f"Error downloading {url}: {e}")
         return ""
         
-def save_tracker_df(df: pd.DataFrame, uri: str) -> None:
+def save_tracker_df(df: pd.DataFrame) -> None:
     """Save tracker DataFrame to local artifacts and upload to GCS (overwrites blob)."""
     if df is None:
         return

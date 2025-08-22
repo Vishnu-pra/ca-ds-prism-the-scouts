@@ -12,11 +12,9 @@ def get_relevant_rms(rfa_analysis_report: str) -> list:
     Returns:
         list: A list of relevant RM IDs (strings).
     """
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    artifacts_dir = os.path.join(script_dir, '..', '..', 'artifacts')
 
     # 1. Load the RM profiles from the local JSON file in the artifacts folder
-    rm_file_path = os.path.join(artifacts_dir, "rm_profiles.json")
+    rm_file_path = "./artifacts/rm_profiles.json"
     if not os.path.exists(rm_file_path):
         print(f"Error: {rm_file_path} not found.")
         return []
@@ -29,7 +27,7 @@ def get_relevant_rms(rfa_analysis_report: str) -> list:
         return []
 
     # 1a. Load company descriptions from the local JSON file in the artifacts folder
-    company_file_path = os.path.join(artifacts_dir, "company_description.json")
+    company_file_path = "./artifacts/company_description.json"
     if not os.path.exists(company_file_path):
         print(f"Error: {company_file_path} not found.")
         return []

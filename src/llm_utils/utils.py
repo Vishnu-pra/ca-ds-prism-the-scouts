@@ -2,7 +2,7 @@ import os
 import json
 import requests
 from typing import Optional, Dict, Any, List
-from text_extraction import text_extraction
+from src.llm_utils.text_extraction import text_extraction
 from google.cloud import storage
 from google.oauth2 import service_account
 
@@ -12,13 +12,13 @@ LLM_PROXY_KEY = "sk-NNj65lMBTN6rTd7XMNOVMA"
 MAX_RETRIES = 3
 
 # GCS Configuration
-DEFAULT_KEY_PATH = "/Users/viswanaath.krishnamoorthy/Downloads/yubi-ai-hackathon-7caa2e2aa43c.json"
+DEFAULT_KEY_PATH = "./artifacts/gcp-hackathon-key.json"
 
 # Initialize Gemini client (if needed)
 try:
     from google import genai
     from google.genai import types
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/Users/viswanaath.krishnamoorthy/Downloads/dataengg-poc-194f121bf3d8.json"
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./artifacts/gcp-vortex-ai-key.json"
     client = genai.Client(
         vertexai=True,
         project="dataengg-poc",

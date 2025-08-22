@@ -236,13 +236,13 @@ def main(keywords,start_date,end_date):
                     check_date = parse(tender_date_str, fuzzy=True).date()
                 
                 # Parse start and end dates with the same explicit format
-                if '/' in start_date:
+                if isinstance(start_date, str) and '/' in start_date:
                     day, month, year = start_date.split('/')
                     start_date_parsed = datetime(int(year), int(month), int(day)).date()
                 else:
                     start_date_parsed = parse(str(start_date), fuzzy=True).date()
                     
-                if '/' in end_date:
+                if isinstance(end_date, str) and '/' in end_date:
                     day, month, year = end_date.split('/')
                     end_date_parsed = datetime(int(year), int(month), int(day)).date()
                 else:

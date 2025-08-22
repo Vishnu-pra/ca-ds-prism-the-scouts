@@ -23,7 +23,7 @@ import pandas as pd
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.settings import *
-from src.crawler.crawl_manager import get_parser_for_website
+from src.crawler.crawl_manager import get_crawler_for_website
 from src.utils.helpers import *
 from src.llm_utils.text_extraction import text_extraction
 from src.llm_utils.summarisation import Summariser
@@ -59,7 +59,7 @@ def main():
     # Crawl and parse
     for website in WEBSITES:
         try:
-            parser = get_parser_for_website(website['type'])
+            parser = get_crawler_for_website(website['type'])
         except ValueError as e:
             print(f"Parser error for {website.get('name')}: {e}")
             continue
@@ -224,7 +224,7 @@ def main():
         # Map relevant RM IDs to names from artifacts/rms.json
         relevant_rm_names: List[str] = []
         try:
-            rm_json_path = os.path.join(ARTIFACTS_DIR, "rms.json")
+            rm_json_path = os.path.join(ARTIFACTS_DIR, "rm_profiles.json")
             with open(rm_json_path, "r") as f:
                 rm_dir = json.load(f)  # expected: list of {"rm_id": ..., "rm_name": ...}
             id_to_name = {}
@@ -258,22 +258,31 @@ def main():
             return json.dumps(data)
 
         # Helper to upload local_file (if any) and update tracker row with path and appended corrigendum value
-        def _upload_and_update(mask_int, corr_value: str, ):
+        def _upload_and_update(mask_int, corr_value: str, tech_summary_dest_blob, doc_summary_dest_blob):
             if dest_blob:
                 try:
                     upload_file_to_gcs(local_file, GCS_BUCKET_NAME, dest_blob, GCS_SERVICE_ACCOUNT_KEY_PATH)
                 except Exception as e:
                     print(f"Warning: failed to upload file to GCS: {e}")
             if mask_int.any():
+
+                needed_index = tracker_df.index[mask_int].to_list() 
+                idx = needed_index[0]
+
+                rm_names_str = json.dumps(relevant_rm_names) if isinstance(relevant_rm_names, list) else (relevant_rm_names or "")
+                cap_comp_str = json.dumps(tech_similarity) if isinstance(tech_similarity, dict) else (tech_similarity or "")
+                doc_comp_str = json.dumps(doc_similarity) if isinstance(doc_similarity, dict) else (doc_similarity or "")
+                due_dates_str = json.dumps(due_dates) if isinstance(due_dates, (list, dict)) else (due_dates or "")
+
                 if dest_blob:
-                    tracker_df.loc[mask_int, CSV_COL_ORIGINAL_FILE_PATH] = dest_blob
+                    tracker_df.loc[idx, CSV_COL_ORIGINAL_FILE_PATH] = dest_blob
                 existing = tracker_df.loc[mask_int, CSV_COL_CORRIGENDUM].iloc[0] if mask_int.any() else ""
-                tracker_df.loc[mask_int, CSV_COL_RELEVANT_RMS] = relevant_rm_names
-                tracker_df.loc[mask_int, CSV_COL_CAPABILITY_COMPARISON] = tech_similarity
-                tracker_df.loc[mask_int, CSV_COL_DOCUMENT_COMPARISON] = doc_similarity
-                tracker_df.loc[mask_int, CSV_COL_DUE_DATES] = due_dates
-                tracker_df.loc[mask_int, CSV_COL_SUMMARY_LINK] = tech_summary_dest_blob
-                tracker_df.loc[mask_int, CSV_COL_CORRIGENDUM] = _append_corrigendum(existing, opening_date, corr_value)
+                tracker_df.loc[idx, CSV_COL_RELEVANT_RMS] = rm_names_str
+                tracker_df.loc[idx, CSV_COL_CAPABILITY_COMPARISON] = cap_comp_str
+                tracker_df.loc[idx, CSV_COL_DOCUMENT_COMPARISON] = doc_comp_str
+                tracker_df.loc[idx, CSV_COL_DUE_DATES] = due_dates_str
+                tracker_df.loc[idx, CSV_COL_SUMMARY_LINK] = tech_summary_dest_blob
+                tracker_df.loc[idx, CSV_COL_CORRIGENDUM] = _append_corrigendum(existing, opening_date, corr_value)
 
         tech_summary_file_name = f"artifacts/{match_internal_id}_{yday}_tech_summary.txt"
         with open(tech_summary_file_name, "w") as f:
@@ -329,7 +338,7 @@ def main():
         tracker_df = pd.concat([tracker_df, pd.DataFrame([row])], ignore_index=True)
 
     # Save tracker CSV back to GCS
-    save_tracker_df(tracker_df, tracker_uri)
+    save_tracker_df(tracker_df)
 
     print("Pipeline finished")
 

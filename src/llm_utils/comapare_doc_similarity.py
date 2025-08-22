@@ -3,7 +3,7 @@ import json
 import torch
 from sentence_transformers import SentenceTransformer, util
 import requests
-from utils import get_rfp_link_from_gcs, list_files_in_gcs_folder
+from src.llm_utils.utils import get_rfp_link_from_gcs, list_files_in_gcs_folder
 
 def load_document_requirements(file_path):
     """Load document requirements from a file"""
@@ -56,6 +56,7 @@ def calculate_similarity_scores(new_sections, existing_sections):
     for category in new_sections.keys():
         new_docs = new_sections[category]
         existing_docs = existing_sections[category]
+        print("Checking similarity for category : ", category)
         
         if new_docs and existing_docs:
             score = calculate_section_similarity(new_docs, existing_docs)
@@ -67,7 +68,7 @@ def calculate_similarity_scores(new_sections, existing_sections):
 
 def calculate_section_similarity(new_docs, existing_docs):
     """Calculate similarity between two lists of documents"""
-    model_path = "/Users/viswanaath.krishnamoorthy/Documents/GitHub/ca-ds-prism-the-scouts/src/artifacts/all-MiniLM-L6-v2"
+    model_path = "./artifacts/all-MiniLM-L6-v2"
     model = SentenceTransformer(model_path)
     
     similarities = []
@@ -186,6 +187,7 @@ def compare_document_requirements_with_knowledge_base(input_text, document_kb_di
     
     for kb_file in kb_files:
         kb_path = os.path.join(document_kb_dir, kb_file)
+        print("checking for KB File : ", kb_file)
         kb_content = load_document_requirements(kb_path)
         
         if not kb_content:

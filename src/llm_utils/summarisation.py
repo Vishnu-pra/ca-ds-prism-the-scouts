@@ -1,15 +1,21 @@
 # from llm_utils import llm_proxy_api
 # import os 
 import json
-# import time
-from document_requirements import GetDocumentRequirement
-from technical_requirements import GetTechnicalRequirement
-from utils import analyze_text
-from comapare_doc_similarity import compare_document_requirements_with_knowledge_base 
-from compare_tech_similarity import compare_text_with_knowledge_base 
+import time
+from src.llm_utils.document_requirements import GetDocumentRequirement
+from src.llm_utils.technical_requirements import GetTechnicalRequirement
+from src.llm_utils.utils import analyze_text
+from src.llm_utils.comapare_doc_similarity import compare_document_requirements_with_knowledge_base 
+from src.llm_utils.compare_tech_similarity import compare_text_with_knowledge_base 
 
-summary_kb_dir = "./artifacts/summary_kb"
-document_kb_dir = "./artifacts/document_kb"
+# from document_requirements import GetDocumentRequirement
+# from technical_requirements import GetTechnicalRequirement
+# from utils import analyze_text
+# from comapare_doc_similarity import compare_document_requirements_with_knowledge_base 
+# from compare_tech_similarity import compare_text_with_knowledge_base 
+
+summary_kb_dir = "../artifacts/summary_kb"
+document_kb_dir = "../artifacts/document_kb"
 
 class Summariser():
 
@@ -35,8 +41,10 @@ class Summariser():
             return beautified_tech_summary, tech_similarity, beautified_document_summary, doc_similarity
 
         
-        except:
+        except Exception as exe:
             print("Summariser pipeline failed")
+            print(exe)
+            return "", {}, "", {}
 
 if __name__ == "__main__":
     summariser = Summariser()
@@ -51,7 +59,13 @@ if __name__ == "__main__":
             print(f"Error loading file {file_path}: {str(e)}")
             return None
     
-    pdf_path = '/Users/viswanaath.krishnamoorthy/Documents/GitHub/ca-ds-prism-the-scouts/sample_pdf_out.txt'
+    def write_text_content(content, filepath):
+        with open(filepath, "w") as f:
+            f.write(content)
+    
+    pdf_path = '../data/e9956863c32b40ef8e4eefce46b067b7.pdf.txt'
+
+    text_path = '../data/sample_text.txt'
     pdf_text = load_text_content(pdf_path)
 
     output = summariser.summariser_pipeline(pdf_text, 'sample_pdf_out.txt')
